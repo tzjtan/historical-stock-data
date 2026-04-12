@@ -1,0 +1,53 @@
+watchlist:
+  us_equities:
+    - yfinance_symbol: "^GSPC"
+      filesafe_name: "SP500"
+      name: "S&P 500 Index"
+    - yfinance_symbol: "^NDX"
+      filesafe_name: "NASDAQ100"
+      name: "Nasdaq 100 Index"
+    - yfinance_symbol: "QQQM"
+      filesafe_name: "QQQM"
+      name: "Invesco Nasdaq 100 ETF"
+
+  international_macro:
+    - yfinance_symbol: "^FTSE"
+      filesafe_name: "FTSE_100"
+      name: "FTSE 100 (UK)"
+    - yfinance_symbol: "000300.SS"
+      filesafe_name: "CSI_300"
+      name: "CSI 300 (China)"
+    - yfinance_symbol: "^HSI"
+      filesafe_name: "HSI"
+      name: "Hang Seng (HK)"
+    - yfinance_symbol: "^N225"
+      filesafe_name: "N225"
+      name: "Nikkei 225 (Japan)"
+    - yfinance_symbol: "^GDAXI"
+      filesafe_name: "DAX"
+      name: "DAX (Germany)"
+
+  currency_and_rates:
+    - yfinance_symbol: "DX-Y.NYB"
+      filesafe_name: "DXY"
+      name: "US Dollar Index"
+    - yfinance_symbol: "^TNX"
+      filesafe_name: "TNX"
+      name: "US 10Y Yield"
+    - yfinance_symbol: "GBPUSD=X"
+      filesafe_name: "GBP_USD"
+      name: "British Pound (GBP/USD)"
+    - yfinance_symbol: "USDCNY=X"
+      filesafe_name: "USD_CNY"
+      name: "Chinese Renminbi (USD/CNY)"
+
+  historical_anchors:
+    - yfinance_symbol: "GC=F"
+      filesafe_name: "GOLD"
+      name: "Gold Futures"
+    - yfinance_symbol: "^DJI"
+      filesafe_name: "DOW"
+      name: "Dow Jones Industrial Average"
+
+settings:
+  default_currency: "USD"

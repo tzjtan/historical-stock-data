@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Historical financial stock data</title>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Theme variables ── */
+    :root {
+      --bg:         #0d1117;
+      --bg2:        #161b22;
+      --border:     #21262d;
+      --border2:    #30363d;
+      --text:       #c9d1d9;
+      --text-dim:   #8b949e;
+      --text-muted: #484f58;
+      --accent:     #58a6ff;
+      --plot-bg:    #0d1117;
+      --plot-grid:  #21262d;
+      --plot-line:  #30363d;
+    }
+    [data-theme="light"] {
+      --bg:         #ffffff;
+      --bg2:        #f6f8fa;
+      --border:     #d0d7de;
+      --border2:    #afb8c1;
+      --text:       #1f2328;
+      --text-dim:   #57606a;
+      --text-muted: #8c959f;
+      --accent:     #0969da;
+      --plot-bg:    #ffffff;
+      --plot-grid:  #eaeef2;
+      --plot-line:  #d0d7de;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    /* ── Ticker section ── */
+    #ticker-section {
+      padding: 0.75rem 1.25rem 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+    .cat-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .ticker-list { display: flex; flex-direction: column; gap: 0.2rem; }
+    .ticker-row  { display: flex; align-items: center; gap: 0.35rem; }
+    .ticker-row input[type="checkbox"] {
+      cursor: pointer; accent-color: var(--accent); width: 13px; height: 13px;
+    }
+    .ticker-row label { cursor: pointer; font-size: 0.82rem; white-space: nowrap; color: var(--text); }
+    .ticker-row .sym  { font-weight: 600; }
+    .ticker-row .desc { color: var(--text-muted); font-size: 0.75rem; margin-left: 0.25rem; }
+
+    /* ── Controls bar ── */
+    #controls {
+      margin: 0.75rem 1.25rem 0;
+      padding: 0.6rem 0.9rem;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 1rem;
+    }
+    .ctrl {
+      display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.82rem; color: var(--text-dim);
+    }
+    .ctrl label { cursor: pointer; }
+    .ctrl input[type="checkbox"] {
+      cursor: pointer; accent-color: var(--accent); width: 13px; height: 13px;
+    }
+    .ctrl input[type="number"] {
+      padding: 0.15rem 0.4rem;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.82rem;
+    }
+    .ctrl input[type="number"]:disabled { opacity: 0.35; }
+    .ctrl input[type="number"].wide { width: 70px; }
+    .ctrl input[type="number"].narrow { width: 58px; }
+    .ctrl select {
+      padding: 0.15rem 0.4rem;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .sep { width: 1px; height: 1rem; background: var(--border); }
+
+    /* ── Rate stepper ── */
+    .rate-stepper {
+      display: flex; align-items: center; gap: 0;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .rate-stepper input[type="number"] {
+      width: 56px; text-align: center;
+      border: none; border-radius: 0;
+      padding: 0.15rem 0.2rem;
+    }
+    .rate-stepper button {
+      width: 28px; height: 100%;
+      background: var(--bg2);
+      border: none; border-left: 1px solid var(--border2);
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      cursor: pointer;
+      padding: 0 0.2rem;
+      user-select: none;
+      transition: background 0.1s;
+    }
+    .rate-stepper button:first-child {
+      border-left: none; border-right: 1px solid var(--border2);
+    }
+    .rate-stepper button:hover { background: var(--border); color: var(--text); }
+
+    /* Rate effective display */
+    #rate-effective {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-style: italic;
+      min-width: 120px;
+    }
+
+    /* ── Theme toggle ── */
+    #theme-btn {
+      margin-left: auto;
+      padding: 0.2rem 0.55rem;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    #theme-btn:hover { background: var(--border); }
+
+    /* ── Chart ── */
+    #chart {
+      flex: 1;
+      min-height: 380px;
+      margin: 0.75rem 1.25rem 1rem;
+    }
+    #chart.picking { cursor: crosshair; }
+  </style>
+</head>
+<body data-theme="dark">
+
+<div id="ticker-section"></div>
+
+<div id="controls">
+  <!-- Normalise -->
+  <div class="ctrl">
+    <input type="checkbox" id="cb-normalize" />
+    <label for="cb-normalize">Normalise</label>
+    <select id="norm-year" disabled title="Year to normalise at (January 1st)"></select>
+  </div>
+  <div class="sep"></div>
+
+  <!-- Log scale -->
+  <div class="ctrl">
+    <input type="checkbox" id="cb-log" />
+    <label for="cb-log">Log scale</label>
+  </div>
+  <div class="sep"></div>
+
+  <!-- Preset rate line -->
+  <div class="ctrl">
+    <input type="checkbox" id="cb-rate" />
+    <label for="cb-rate">Rate line</label>
+    <div class="rate-stepper">
+      <button id="rate-dec" title="Decrease">−</button>
+      <input type="number" id="rate-val" class="narrow" value="7" min="0" max="999" step="0.5" disabled />
+      <button id="rate-inc" title="Increase">+</button>
+    </div>
+    <span>%&nbsp;/&nbsp;yr</span>
+    <span id="rate-effective"></span>
+  </div>
+  <div class="sep"></div>
+
+  <!-- Custom two-point rate line -->
+  <div class="ctrl">
+    <input type="checkbox" id="cb-custom" />
+    <label for="cb-custom">Custom line</label>
+    <span id="custom-pick-status" style="font-size:0.78rem;color:var(--accent);font-style:italic;margin-left:0.35rem;"></span>
+    <span id="custom-rate-label" style="font-size:0.78rem;color:var(--text-muted);font-style:italic;margin-left:0.5rem;min-width:120px;"></span>
+    <button id="custom-reset" style="display:none;padding:0.1rem 0.4rem;background:var(--bg2);border:1px solid var(--border2);border-radius:4px;color:var(--text-dim);font-size:0.75rem;cursor:pointer;">Reset</button>
+  </div>
+
+  <!-- Theme toggle (pushed right) -->
+  <button id="theme-btn">Light mode</button>
+</div>
+
+<div id="chart"></div>
+
+<script>
+// ── Ticker definitions ───────────────────────────────────────────────────────
+
+const GROUPS = [
+  {
+    label: 'US Equities',
+    tickers: [
+      { id: 'SP500',     name: 'S&P 500'         },
+      { id: 'NASDAQ100', name: 'Nasdaq 100'       },
+      { id: 'QQQM',      name: 'Invesco QQQ'      },
+    ],
+  },
+  {
+    label: 'International',
+    tickers: [
+      { id: 'FTSE_100', name: 'FTSE 100 (UK)'      },
+      { id: 'CSI_300',  name: 'CSI 300 (China)'    },
+      { id: 'HSI',      name: 'Hang Seng (HK)'     },
+      { id: 'N225',     name: 'Nikkei 225 (Japan)' },
+      { id: 'DAX',      name: 'DAX (Germany)'      },
+    ],
+  },
+  {
+    label: 'Currencies & Rates',
+    tickers: [
+      { id: 'DXY',     name: 'US Dollar Index' },
+      { id: 'TNX',     name: 'US 10Y Yield'    },
+      { id: 'GBP_USD', name: 'GBP / USD'       },
+      { id: 'USD_CNY', name: 'USD / CNY'       },
+    ],
+  },
+  {
+    label: 'Macro',
+    tickers: [
+      { id: 'GOLD', name: 'Gold Futures' },
+      { id: 'DOW',  name: 'Dow Jones'   },
+    ],
+  },
+];
+
+// ── Build year selector (1871–current year) ──────────────────────────────────
+
+const normYearSel = document.getElementById('norm-year');
+const currentYear = new Date().getFullYear();
+const DEFAULT_NORM_YEAR = 2000;
+
+for (let y = currentYear; y >= 1871; y--) {
+  const opt = document.createElement('option');
+  opt.value = y;
+  opt.textContent = y;
+  if (y === DEFAULT_NORM_YEAR) opt.selected = true;
+  normYearSel.appendChild(opt);
+}
+
+// ── Build ticker checkboxes ──────────────────────────────────────────────────
+
+const section = document.getElementById('ticker-section');
+
+for (const group of GROUPS) {
+  const wrap    = document.createElement('div');
+  const heading = document.createElement('div');
+  heading.className   = 'cat-label';
+  heading.textContent = group.label;
+  wrap.appendChild(heading);
+
+  const list = document.createElement('div');
+  list.className = 'ticker-list';
+
+  for (const t of group.tickers) {
+    const row = document.createElement('div');
+    row.className = 'ticker-row';
+    row.innerHTML = `
+      <input type="checkbox" id="cb-${t.id}" data-id="${t.id}" />
+      <label for="cb-${t.id}">
+        <span class="sym">${t.id}</span><span class="desc">${t.name}</span>
+      </label>`;
+    row.querySelector('input').addEventListener('change', onTickerChange);
+    list.appendChild(row);
+  }
+
+  wrap.appendChild(list);
+  section.appendChild(wrap);
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+const cache  = {};         // id → { dates: string[], closes: number[] }
+const active = new Set();  // currently selected ticker ids
+
+// Custom line pick state
+let customPt1 = null;       // { date: string, value: number }
+let customPt2 = null;
+let customPickState = 0;    // 0 = idle, 1 = picking pt1, 2 = picking pt2
+
+function updateCustomPickUI() {
+  const statusEl = document.getElementById('custom-pick-status');
+  const resetBtn = document.getElementById('custom-reset');
+  const chartDiv = document.getElementById('chart');
+  const on = document.getElementById('cb-custom').checked;
+
+  if (!on) {
+    statusEl.textContent = '';
+    resetBtn.style.display = 'none';
+    chartDiv.classList.remove('picking');
+    return;
+  }
+
+  if (customPickState === 1) {
+    statusEl.textContent = 'Click chart for start point';
+    resetBtn.style.display = 'none';
+    chartDiv.classList.add('picking');
+  } else if (customPickState === 2) {
+    statusEl.textContent = `Start: ${customPt1.date} @ ${customPt1.value.toFixed(2)}  —  click for end point`;
+    resetBtn.style.display = '';
+    chartDiv.classList.add('picking');
+  } else {
+    if (customPt1 && customPt2) {
+      statusEl.textContent = `${customPt1.date} → ${customPt2.date}`;
+    } else {
+      statusEl.textContent = '';
+    }
+    resetBtn.style.display = customPt1 ? '' : 'none';
+    chartDiv.classList.remove('picking');
+  }
+}
+
+// ── CSV loading + forward-fill ───────────────────────────────────────────────
+
+async function loadTicker(id) {
+  if (cache[id]) return cache[id];
+  const res = await fetch(`./data/${id}.csv`);
+  if (!res.ok) throw new Error(`Could not load data/${id}.csv (${res.status})`);
+  const text = await res.text();
+  const result = parseAndFill(text);
+  cache[id] = result;
+  return result;
+}
+
+function parseAndFill(csvText) {
+  const lines = csvText.trim().split('\n');
+  const raw = [];
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    const date  = parts[0]?.trim();
+    const close = parseFloat(parts[2]?.trim());  // date,open,close,volume
+    if (date && !isNaN(close)) raw.push({ date, close });
+  }
+  if (raw.length === 0) return { dates: [], closes: [] };
+
+  const byDate = new Map(raw.map(r => [r.date, r.close]));
+  const dates  = [];
+  const closes = [];
+  let last = null;
+
+  const d   = new Date(raw[0].date + 'T00:00:00Z');
+  const end = new Date(raw[raw.length - 1].date + 'T00:00:00Z');
+
+  while (d <= end) {
+    const ds  = d.toISOString().slice(0, 10);
+    const val = byDate.get(ds);
+    if (val !== undefined) last = val;
+    if (last !== null) { dates.push(ds); closes.push(last); }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return { dates, closes };
+}
+
+// ── Normalisation helper ─────────────────────────────────────────────────────
+
+/**
+ * Returns the closes array normalised so that the value on the closest
+ * available date at or after Jan 1 of `normYear` equals 1.0.
+ */
+function normalise(dates, closes, normYear) {
+  const target = `${normYear}-01-01`;
+  // Find first index on or after target
+  let idx = dates.findIndex(d => d >= target);
+  if (idx === -1) idx = 0;   // all data is before target year — use first point
+  const base = closes[idx];
+  if (!base) return closes;
+  return closes.map(v => v / base);
+}
+
+// ── Preset rate-line generator ───────────────────────────────────────────────
+
+/**
+ * Generates a compound-growth line starting at `startValue` from `startDate`.
+ * Returns { dates, values } sampled weekly.
+ */
+function buildRateLine(startDate, endDate, annualPct, startValue = 1) {
+  const r    = annualPct / 100;
+  const t0ms = new Date(startDate + 'T00:00:00Z').getTime();
+  const stop = new Date(endDate   + 'T00:00:00Z');
+  const MS_YR = 365.25 * 24 * 3600 * 1000;
+
+  const dates  = [];
+  const values = [];
+  const d = new Date(t0ms);
+
+  while (d <= stop) {
+    const years = (d.getTime() - t0ms) / MS_YR;
+    dates.push(d.toISOString().slice(0, 10));
+    values.push(startValue * Math.pow(1 + r, years));
+    d.setUTCDate(d.getUTCDate() + 7);
+  }
+  const finalYears = (stop.getTime() - t0ms) / MS_YR;
+  dates.push(endDate);
+  values.push(startValue * Math.pow(1 + r, finalYears));
+
+  return { dates, values };
+}
+
+// ── Custom two-point line ────────────────────────────────────────────────────
+
+/**
+ * Infers an effective annual rate from two (date, value) points and builds a
+ * line across the full chart range [startDate, endDate].
+ * Also updates the #custom-rate-label element with the effective rate.
+ */
+function buildCustomLine(pt1Date, pt1Val, pt2Date, pt2Val, chartStart, chartEnd) {
+  const t1ms  = new Date(pt1Date + 'T00:00:00Z').getTime();
+  const t2ms  = new Date(pt2Date + 'T00:00:00Z').getTime();
+  const MS_YR = 365.25 * 24 * 3600 * 1000;
+  const years = (t2ms - t1ms) / MS_YR;
+
+  if (years === 0 || pt1Val <= 0 || pt2Val <= 0) return null;
+
+  const annualRate = Math.pow(pt2Val / pt1Val, 1 / years) - 1;
+
+  // Update the effective-rate label
+  document.getElementById('custom-rate-label').textContent =
+    `≈ ${(annualRate * 100).toFixed(2)} % / yr`;
+
+  // Extend line across the full chart range
+  const start0ms = new Date(chartStart + 'T00:00:00Z').getTime();
+  const stop     = new Date(chartEnd   + 'T00:00:00Z');
+  const dates    = [];
+  const values   = [];
+  const d = new Date(start0ms);
+
+  while (d <= stop) {
+    const yrs = (d.getTime() - t1ms) / MS_YR;
+    dates.push(d.toISOString().slice(0, 10));
+    values.push(pt1Val * Math.pow(1 + annualRate, yrs));
+    d.setUTCDate(d.getUTCDate() + 7);
+  }
+  const finalYrs = (stop.getTime() - t1ms) / MS_YR;
+  dates.push(chartEnd);
+  values.push(pt1Val * Math.pow(1 + annualRate, finalYrs));
+
+  return { dates, values, annualRate };
+}
+
+// ── Theme ────────────────────────────────────────────────────────────────────
+
+let isDark = true;
+
+document.getElementById('theme-btn').addEventListener('click', () => {
+  isDark = !isDark;
+  document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  document.getElementById('theme-btn').textContent = isDark ? 'Light mode' : 'Dark mode';
+  renderChart();
+});
+
+function themeColors() {
+  return isDark
+    ? { paper: '#0d1117', plot: '#0d1117', grid: '#21262d', line: '#30363d', font: '#8b949e', hover_bg: '#161b22', hover_border: '#30363d', hover_font: '#c9d1d9', rate_line: '#f0e68c' }
+    : { paper: '#ffffff', plot: '#ffffff', grid: '#eaeef2', line: '#d0d7de', font: '#57606a', hover_bg: '#f6f8fa', hover_border: '#d0d7de', hover_font: '#1f2328', rate_line: '#9a6f00' };
+}
+
+// ── Chart rendering ──────────────────────────────────────────────────────────
+
+const COLORS = [
+  '#58a6ff', '#3fb950', '#f78166', '#d2a8ff',
+  '#ffa657', '#79c0ff', '#56d364', '#ff7b72',
+  '#a371f7', '#e3b341', '#bc8cff', '#ffb3ae',
+  '#87c28e', '#f0883e',
+];
+let colorIdx = 0;
+const assignedColors = {};
+function colorFor(id) {
+  if (!assignedColors[id]) {
+    assignedColors[id] = COLORS[colorIdx++ % COLORS.length];
+  }
+  return assignedColors[id];
+}
+
+async function renderChart() {
+  // Preserve current x-axis zoom if user has zoomed in
+  const chartEl = document.getElementById('chart');
+  const savedXRange = (chartEl._fullLayout && chartEl._fullLayout.xaxis.autorange === false)
+    ? [...chartEl._fullLayout.xaxis.range] : null;
+
+  const tc = themeColors();
+
+  const normalize = document.getElementById('cb-normalize').checked;
+  const normYear  = parseInt(normYearSel.value, 10);
+  const logScale  = document.getElementById('cb-log').checked;
+  const showRate  = document.getElementById('cb-rate').checked;
+  const annualPct = parseFloat(document.getElementById('rate-val').value) || 0;
+  const showCustom = document.getElementById('cb-custom').checked;
+
+  const ids = [...active];
+  if (ids.length === 0) {
+    Plotly.react('chart', [], emptyLayout(), { responsive: true, displaylogo: false });
+    return;
+  }
+
+  const loaded = await Promise.all(
+    ids.map(id =>
+      loadTicker(id)
+        .then(data => ({ id, data }))
+        .catch(err => { console.error(err); return null; })
+    )
+  );
+
+  const traces = [];
+  let earliestDate = null;
+  let latestDate   = null;
+
+  for (const item of loaded) {
+    if (!item || item.data.dates.length === 0) continue;
+    const { id, data } = item;
+
+    const ys = normalize
+      ? normalise(data.dates, data.closes, normYear)
+      : [...data.closes];
+
+    traces.push({
+      type: 'scatter',
+      mode: 'lines',
+      name: id,
+      x: data.dates,
+      y: ys,
+      line: { color: colorFor(id), width: 1.5 },
+      hovertemplate: '<b>%{fullData.name}</b><br>%{x}<br>%{y:.4f}<extra></extra>',
+    });
+
+    if (!earliestDate || data.dates[0] < earliestDate) earliestDate = data.dates[0];
+    const last = data.dates[data.dates.length - 1];
+    if (!latestDate || last > latestDate) latestDate = last;
+  }
+
+  if (showRate && earliestDate) {
+    // Compute the value the rate line has at earliestDate such that it equals
+    // 1.0 at the normalisation anchor (when normalise is on) or 1.0 at the
+    // first data point of the first trace (when normalise is off).
+    const MS_YR = 365.25 * 24 * 3600 * 1000;
+    const r = annualPct / 100;
+    let startValue;
+    if (normalize) {
+      // Anchor = Jan 1 of normYear at value 1.0; back-calculate to earliestDate
+      const anchorMs   = new Date(`${normYear}-01-01T00:00:00Z`).getTime();
+      const earliestMs = new Date(earliestDate + 'T00:00:00Z').getTime();
+      const yearsOffset = (earliestMs - anchorMs) / MS_YR;
+      startValue = Math.pow(1 + r, yearsOffset);  // may be <1 if earliest is before anchor
+    } else {
+      const firstTrace = traces[0];
+      startValue = firstTrace ? firstTrace.y[0] : 1;
+    }
+    const { dates, values } = buildRateLine(earliestDate, latestDate, annualPct, startValue);
+    traces.push({
+      type: 'scatter', mode: 'lines',
+      name: `${annualPct}% / yr`,
+      x: dates, y: values,
+      line: { color: tc.rate_line, width: 2, dash: 'dot' },
+      hovertemplate: '<b>%{fullData.name}</b><br>%{x}<br>%{y:.4f}<extra></extra>',
+    });
+
+    // Update effective rate annotation
+    updateRateEffective(annualPct);
+  }
+
+  // Custom two-point line
+  if (showCustom && earliestDate && customPt1 && customPt2) {
+    const result = buildCustomLine(
+      customPt1.date, customPt1.value,
+      customPt2.date, customPt2.value,
+      earliestDate, latestDate
+    );
+    if (result) {
+      const label = `custom (${(result.annualRate * 100).toFixed(2)}% / yr)`;
+      traces.push({
+        type: 'scatter', mode: 'lines',
+        name: label,
+        x: result.dates, y: result.values,
+        line: { color: '#ff9f43', width: 1.5, dash: 'dashdot' },
+        hovertemplate: '<b>%{fullData.name}</b><br>%{x}<br>%{y:.4f}<extra></extra>',
+      });
+    }
+  }
+
+  const layout = {
+    paper_bgcolor: tc.paper,
+    plot_bgcolor:  tc.plot,
+    font: { color: tc.font, size: 11 },
+    xaxis: {
+      type: 'date', gridcolor: tc.grid, linecolor: tc.line, tickcolor: tc.line,
+      hoverformat: '%Y-%m-%d',
+      ...(savedXRange ? { range: savedXRange, autorange: false } : {}),
+    },
+    yaxis: {
+      type: logScale ? 'log' : 'linear',
+      gridcolor: tc.grid, linecolor: tc.line, tickcolor: tc.line,
+      exponentformat: 'none',
+      tickformat: normalize ? '.2f' : undefined,
+    },
+    legend: {
+      bgcolor: 'rgba(0,0,0,0)', bordercolor: tc.line, borderwidth: 1,
+      font: { color: tc.font, size: 11 },
+    },
+    margin: { t: 16, r: 16, b: 48, l: 60 },
+    hovermode: 'x unified',
+    hoverlabel: { bgcolor: tc.hover_bg, bordercolor: tc.hover_border, font: { color: tc.hover_font } },
+  };
+
+  Plotly.react('chart', traces, layout, { responsive: true, displaylogo: false });
+}
+
+function emptyLayout() {
+  const tc = themeColors();
+  return {
+    paper_bgcolor: tc.paper, plot_bgcolor: tc.plot,
+    font: { color: tc.font },
+    xaxis: { gridcolor: tc.grid, linecolor: tc.line },
+    yaxis: { gridcolor: tc.grid, linecolor: tc.line },
+    margin: { t: 16, r: 16, b: 48, l: 60 },
+    annotations: [{
+      text: 'Select tickers above to begin',
+      showarrow: false, xref: 'paper', yref: 'paper', x: 0.5, y: 0.5,
+      font: { color: tc.font, size: 15 },
+    }],
+  };
+}
+
+// ── Effective rate display ───────────────────────────────────────────────────
+
+function updateRateEffective(annualPct) {
+  // Show what 1.0 grows to after 10 years
+  const val10 = Math.pow(1 + annualPct / 100, 10);
+  document.getElementById('rate-effective').textContent =
+    `→ ×${val10.toFixed(2)} in 10 yr`;
+}
+
+// ── Event wiring ─────────────────────────────────────────────────────────────
+
+async function onTickerChange(e) {
+  const id = e.target.dataset.id;
+  e.target.checked ? active.add(id) : active.delete(id);
+  await renderChart();
+}
+
+// Normalise checkbox
+document.getElementById('cb-normalize').addEventListener('change', () => {
+  const on = document.getElementById('cb-normalize').checked;
+  normYearSel.disabled = !on;
+  renderChart();
+});
+
+// Norm year selector
+normYearSel.addEventListener('change', renderChart);
+
+// Log scale
+document.getElementById('cb-log').addEventListener('change', renderChart);
+
+// Rate line checkbox
+document.getElementById('cb-rate').addEventListener('change', () => {
+  const on = document.getElementById('cb-rate').checked;
+  document.getElementById('rate-val').disabled = !on;
+  document.getElementById('rate-dec').disabled = !on;
+  document.getElementById('rate-inc').disabled = !on;
+  if (!on) document.getElementById('rate-effective').textContent = '';
+  renderChart();
+});
+
+// Rate stepper buttons
+document.getElementById('rate-dec').addEventListener('click', () => {
+  const inp = document.getElementById('rate-val');
+  inp.value = Math.max(0, parseFloat(inp.value) - 0.5);
+  renderChart();
+});
+document.getElementById('rate-inc').addEventListener('click', () => {
+  const inp = document.getElementById('rate-val');
+  inp.value = parseFloat(inp.value) + 0.5;
+  renderChart();
+});
+document.getElementById('rate-val').addEventListener('input', debounce(renderChart, 350));
+
+// Custom line checkbox
+document.getElementById('cb-custom').addEventListener('change', () => {
+  const on = document.getElementById('cb-custom').checked;
+  if (on) {
+    customPt1 = null;
+    customPt2 = null;
+    customPickState = 1;
+    document.getElementById('custom-rate-label').textContent = '';
+  } else {
+    customPickState = 0;
+    document.getElementById('custom-rate-label').textContent = '';
+  }
+  updateCustomPickUI();
+  renderChart();
+});
+
+// Custom line reset button
+document.getElementById('custom-reset').addEventListener('click', () => {
+  customPt1 = null;
+  customPt2 = null;
+  customPickState = 1;
+  document.getElementById('custom-rate-label').textContent = '';
+  updateCustomPickUI();
+  renderChart();
+});
+
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+
+// ── Initial empty chart ───────────────────────────────────────────────────────
+
+Plotly.newPlot('chart', [], emptyLayout(), { responsive: true, displaylogo: false }).then(() => {
+  document.getElementById('chart').on('plotly_click', function(data) {
+    if (customPickState === 0) return;
+    if (!document.getElementById('cb-custom').checked) return;
+    if (!data.points || data.points.length === 0) return;
+
+    const pt = data.points[0];
+    // x is a date string from Plotly (e.g. "2020-01-15") or a timestamp
+    const date = typeof pt.x === 'string' ? pt.x.slice(0, 10)
+                                           : new Date(pt.x).toISOString().slice(0, 10);
+    const value = pt.y;
+
+    if (customPickState === 1) {
+      customPt1 = { date, value };
+      customPickState = 2;
+      updateCustomPickUI();
+    } else if (customPickState === 2) {
+      customPt2 = { date, value };
+      // Ensure chronological order
+      if (customPt1.date > customPt2.date) {
+        [customPt1, customPt2] = [customPt2, customPt1];
+      }
+      customPickState = 0;
+      updateCustomPickUI();
+      renderChart();
+    }
+  });
+});
+</script>
+</body>
+</html>
