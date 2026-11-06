@@ -321,6 +321,21 @@ for (const group of GROUPS) {
 const cache  = {};         // id → { dates: string[], closes: number[] }
 const active = new Set();  // currently selected ticker ids
 
+// Restore selected tickers from cookie, dropping any that no longer exist.
+const KNOWN_IDS = new Set(GROUPS.flatMap(g => g.tickers.map(t => t.id)));
+{
+  const saved = getCookie('tickers');
+  if (Array.isArray(saved)) {
+    for (const id of saved) {
+      if (!KNOWN_IDS.has(id)) continue;
+      active.add(id);
+      const cb = document.getElementById(`cb-${id}`);
+      if (cb) cb.checked = true;
+    }
+    setCookie('tickers', [...active]);  // purge stale ids
+  }
+}
+
 // Custom line pick state
 let customPt1 = null;       // { date: string, value: number }
 let customPt2 = null;
@@ -528,6 +543,19 @@ function colorFor(id) {
 // Remembered x-axis range (cookie). null = full range.
 // { start, end, live } — live = end follows the latest data date.
 let xRangePref = getCookie('xrange') || null;
+if (xRangePref && !(typeof xRangePref.start === 'string' && typeof xRangePref.end === 'string')) xRangePref = null;
+
+// Remembered y-axis range. Only valid for the same scale mode it was saved in
+// (log ranges are in log10 units; normalised values differ from raw ones).
+let yRangePref = getCookie('yrange') || null;
+function yScaleKey() {
+  const norm = document.getElementById('cb-normalize').checked;
+  return `${document.getElementById('cb-log').checked ? 'log' : 'lin'}|${norm ? 'norm' + normYearSel.value : 'raw'}`;
+}
+function validYPref() {
+  return yRangePref && Array.isArray(yRangePref.range) && yRangePref.range.length === 2
+    && yRangePref.range.every(Number.isFinite) && yRangePref.key === yScaleKey();
+}
 let lastLatestDate = null;
 
 async function renderChart() {
@@ -665,9 +693,17 @@ async function renderChart() {
     hoverlabel: { bgcolor: tc.hover_bg, bordercolor: tc.hover_border, font: { color: tc.hover_font } },
   };
 
-  // Y limits are set by data traces only; rate/custom lines don't change them.
+  if (validYPref()) {
+    // User has zoomed Y: keep those limits whatever gets added.
+    layout.yaxis = { ...layout.yaxis, range: yRangePref.range.slice(), autorange: false };
+  } else if (yRangePref) {
+    yRangePref = null;  // stale (scale mode changed) — purge
+    setCookie('yrange', null);
+  }
+
+  // Otherwise Y limits are set by data traces only; rate/custom lines don't change them.
   const dataTraces = traces.filter(t => !t.isRefLine);
-  if (dataTraces.length < traces.length && dataTraces.length > 0) {
+  if (!validYPref() && dataTraces.length < traces.length && dataTraces.length > 0) {
     await Plotly.react('chart', dataTraces, layout, { responsive: true, displaylogo: false });
     const yr = chartEl._fullLayout.yaxis.range.slice();
     layout.yaxis = { ...layout.yaxis, range: yr, autorange: false };
@@ -676,6 +712,17 @@ async function renderChart() {
 }
 
 function onRelayout(ev) {
+  if (ev['yaxis.autorange']) {
+    yRangePref = null;
+    setCookie('yrange', null);
+  } else {
+    const y0 = ev['yaxis.range[0]'] ?? ev['yaxis.range']?.[0];
+    const y1 = ev['yaxis.range[1]'] ?? ev['yaxis.range']?.[1];
+    if (y0 !== undefined && y1 !== undefined) {
+      yRangePref = { range: [Number(y0), Number(y1)], key: yScaleKey() };
+      setCookie('yrange', yRangePref);
+    }
+  }
   if (ev['xaxis.autorange']) {
     xRangePref = null;
   } else {
@@ -720,6 +767,7 @@ function updateRateEffective(annualPct) {
 async function onTickerChange(e) {
   const id = e.target.dataset.id;
   e.target.checked ? active.add(id) : active.delete(id);
+  setCookie('tickers', [...active]);
   await renderChart();
 }
 
@@ -796,6 +844,7 @@ function debounce(fn, ms) {
 
 Plotly.newPlot('chart', [], emptyLayout(), { responsive: true, displaylogo: false }).then(() => {
   document.getElementById('chart').on('plotly_relayout', onRelayout);
+  if (active.size) renderChart();
   document.getElementById('chart').on('plotly_click', function(data) {
     if (customPickState === 0) return;
     if (!document.getElementById('cb-custom').checked) return;
