@@ -689,6 +689,18 @@ async function renderChart() {
       font: { color: tc.font, size: 11 },
     },
     margin: { t: 16, r: 16, b: 48, l: 60 },
+    // Mark the latest data date so returning users can see the chart has moved on
+    shapes: latestDate ? [{
+      type: 'line', xref: 'x', yref: 'paper', x0: latestDate, x1: latestDate, y0: 0, y1: 1,
+      line: { color: tc.font, width: 1, dash: 'dot' },
+    }] : [],
+    annotations: latestDate ? [{
+      x: latestDate, xref: 'x', y: 0, yref: 'paper', yshift: -2,
+      text: latestDate, showarrow: false,
+      xanchor: 'right', yanchor: 'top',
+      font: { color: tc.hover_font, size: 10 },
+      bgcolor: tc.hover_bg, bordercolor: tc.font, borderwidth: 1, borderpad: 2,
+    }] : [],
     hovermode: 'x unified',
     hoverlabel: { bgcolor: tc.hover_bg, bordercolor: tc.hover_border, font: { color: tc.hover_font } },
   };
