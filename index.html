@@ -230,6 +230,7 @@ const GROUPS = [
       { id: 'SP500',     name: 'S&P 500'         },
       { id: 'NASDAQ100', name: 'Nasdaq 100'       },
       { id: 'QQQM',      name: 'Invesco QQQ'      },
+      { id: 'TQQQ',      name: 'ProShares 3x QQQ' },
     ],
   },
   {
@@ -260,11 +261,22 @@ const GROUPS = [
   },
 ];
 
+// ── Cookie helpers ────────────────────────────────────────────────────────────
+
+function setCookie(name, value) {
+  document.cookie = `${name}=${encodeURIComponent(JSON.stringify(value))}; max-age=${60*60*24*365*5}; path=/; SameSite=Lax`;
+}
+function getCookie(name) {
+  const m = document.cookie.split('; ').find(c => c.startsWith(name + '='));
+  if (!m) return undefined;
+  try { return JSON.parse(decodeURIComponent(m.slice(name.length + 1))); } catch { return undefined; }
+}
+
 // ── Build year selector (1871–current year) ──────────────────────────────────
 
 const normYearSel = document.getElementById('norm-year');
 const currentYear = new Date().getFullYear();
-const DEFAULT_NORM_YEAR = 2000;
+const DEFAULT_NORM_YEAR = currentYear - 1;
 
 for (let y = currentYear; y >= 1871; y--) {
   const opt = document.createElement('option');
@@ -475,12 +487,18 @@ function buildCustomLine(pt1Date, pt1Val, pt2Date, pt2Val, chartStart, chartEnd)
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
-let isDark = true;
+let isDark = getCookie('theme') !== 'light';
+
+function applyTheme() {
+  document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  document.getElementById('theme-btn').textContent = isDark ? 'Light mode' : 'Dark mode';
+}
+applyTheme();
 
 document.getElementById('theme-btn').addEventListener('click', () => {
   isDark = !isDark;
-  document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  document.getElementById('theme-btn').textContent = isDark ? 'Light mode' : 'Dark mode';
+  setCookie('theme', isDark ? 'dark' : 'light');
+  applyTheme();
   renderChart();
 });
 
@@ -507,11 +525,13 @@ function colorFor(id) {
   return assignedColors[id];
 }
 
+// Remembered x-axis range (cookie). null = full range.
+// { start, end, live } — live = end follows the latest data date.
+let xRangePref = getCookie('xrange') || null;
+let lastLatestDate = null;
+
 async function renderChart() {
-  // Preserve current x-axis zoom if user has zoomed in
   const chartEl = document.getElementById('chart');
-  const savedXRange = (chartEl._fullLayout && chartEl._fullLayout.xaxis.autorange === false)
-    ? [...chartEl._fullLayout.xaxis.range] : null;
 
   const tc = themeColors();
 
@@ -585,6 +605,7 @@ async function renderChart() {
       type: 'scatter', mode: 'lines',
       name: `${annualPct}% / yr`,
       x: dates, y: values,
+      isRefLine: true,
       line: { color: tc.rate_line, width: 2, dash: 'dot' },
       hovertemplate: '<b>%{fullData.name}</b><br>%{x}<br>%{y:.4f}<extra></extra>',
     });
@@ -606,10 +627,18 @@ async function renderChart() {
         type: 'scatter', mode: 'lines',
         name: label,
         x: result.dates, y: result.values,
+        isRefLine: true,
         line: { color: '#ff9f43', width: 1.5, dash: 'dashdot' },
         hovertemplate: '<b>%{fullData.name}</b><br>%{x}<br>%{y:.4f}<extra></extra>',
       });
     }
+  }
+
+  lastLatestDate = latestDate;
+  let savedXRange = null;
+  if (xRangePref) {
+    const end = (xRangePref.live && latestDate) ? latestDate : xRangePref.end;
+    savedXRange = [xRangePref.start, end];
   }
 
   const layout = {
@@ -636,7 +665,29 @@ async function renderChart() {
     hoverlabel: { bgcolor: tc.hover_bg, bordercolor: tc.hover_border, font: { color: tc.hover_font } },
   };
 
-  Plotly.react('chart', traces, layout, { responsive: true, displaylogo: false });
+  // Y limits are set by data traces only; rate/custom lines don't change them.
+  const dataTraces = traces.filter(t => !t.isRefLine);
+  if (dataTraces.length < traces.length && dataTraces.length > 0) {
+    await Plotly.react('chart', dataTraces, layout, { responsive: true, displaylogo: false });
+    const yr = chartEl._fullLayout.yaxis.range.slice();
+    layout.yaxis = { ...layout.yaxis, range: yr, autorange: false };
+  }
+  await Plotly.react('chart', traces, layout, { responsive: true, displaylogo: false });
+}
+
+function onRelayout(ev) {
+  if (ev['xaxis.autorange']) {
+    xRangePref = null;
+  } else {
+    const r0 = ev['xaxis.range[0]'] ?? ev['xaxis.range']?.[0];
+    const r1 = ev['xaxis.range[1]'] ?? ev['xaxis.range']?.[1];
+    if (r0 === undefined || r1 === undefined) return;
+    const start = String(r0).slice(0, 10);
+    const end   = String(r1).slice(0, 10);
+    const live  = !!lastLatestDate && end >= lastLatestDate;
+    xRangePref = { start, end, live };
+  }
+  setCookie('xrange', xRangePref);
 }
 
 function emptyLayout() {
@@ -683,7 +734,9 @@ document.getElementById('cb-normalize').addEventListener('change', () => {
 normYearSel.addEventListener('change', renderChart);
 
 // Log scale
-document.getElementById('cb-log').addEventListener('change', renderChart);
+const cbLog = document.getElementById('cb-log');
+cbLog.checked = getCookie('logScale') === true;
+cbLog.addEventListener('change', () => { setCookie('logScale', cbLog.checked); renderChart(); });
 
 // Rate line checkbox
 document.getElementById('cb-rate').addEventListener('change', () => {
@@ -742,6 +795,7 @@ function debounce(fn, ms) {
 // ── Initial empty chart ───────────────────────────────────────────────────────
 
 Plotly.newPlot('chart', [], emptyLayout(), { responsive: true, displaylogo: false }).then(() => {
+  document.getElementById('chart').on('plotly_relayout', onRelayout);
   document.getElementById('chart').on('plotly_click', function(data) {
     if (customPickState === 0) return;
     if (!document.getElementById('cb-custom').checked) return;

@@ -9,6 +9,9 @@ watchlist:
     - yfinance_symbol: "QQQM"
       filesafe_name: "QQQM"
       name: "Invesco Nasdaq 100 ETF"
+    - yfinance_symbol: "TQQQ"
+      filesafe_name: "TQQQ"
+      name: "ProShares UltraPro QQQ (3x Nasdaq 100)"
 
   international_macro:
     - yfinance_symbol: "^FTSE"
