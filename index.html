@@ -772,9 +772,12 @@ async function onTickerChange(e) {
 }
 
 // Normalise checkbox
-document.getElementById('cb-normalize').addEventListener('change', () => {
-  const on = document.getElementById('cb-normalize').checked;
-  normYearSel.disabled = !on;
+const cbNorm = document.getElementById('cb-normalize');
+cbNorm.checked = getCookie('normalize') === true;
+normYearSel.disabled = !cbNorm.checked;
+cbNorm.addEventListener('change', () => {
+  setCookie('normalize', cbNorm.checked);
+  normYearSel.disabled = !cbNorm.checked;
   renderChart();
 });
 
